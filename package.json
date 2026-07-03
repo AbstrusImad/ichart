@@ -1,0 +1,33 @@
+{
+  "name": "ichart",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "iChart — a living AI chart. Real market candles, AI-driven overlays, immersive UI.",
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node server/index.mjs",
+    "dev:client": "vite",
+    "build": "tsc -b && vite build",
+    "postbuild": "node scripts/static-config.mjs",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=ichart --commit-dirty=true",
+    "start": "node server/index.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "genlayer-js": "^1.1.8",
+    "lightweight-charts": "^5.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}

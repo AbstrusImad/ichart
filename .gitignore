@@ -1,0 +1,17 @@
+# dependencies & build
+node_modules
+dist
+
+# secrets & local environment — NEVER commit
+.env
+*.local
+.claude/
+
+# tooling caches
+.wrangler/
+__pycache__/
+*.pyc
+
+# OS noise
+.DS_Store
+npm-debug.log*
