@@ -742,6 +742,52 @@ DISCLAIMER = ("Educational market-structure description validated by "
               "independent AI validators. Not financial advice, and never "
               "a forecast.")
 
+# Spanish-language detection markers. iChart serves a bilingual audience;
+# the written answer must come back in the language of the question.
+SPANISH_CHARS = "¿¡áéíóúñü"
+SPANISH_TOKENS = (
+    " el ", " la ", " los ", " las ", " es ", " esta ", " está", " que ",
+    "qué", "cómo", "cuál", "dónde", "cuando", "cuándo", "por que", "porque",
+    "riesgo", "tendencia", "soporte", "resistencia", "escenario", "mercado",
+    "ahora", "puede", "hacia", "nivel", "velas", "gráfic", "grafic",
+    "análisis", "analisis", "estructura", "retroceso", "explica", "dime",
+    "muestra", "dibuja",
+)
+
+
+def _looks_spanish(question_lower):
+    """Cheap language sniff: Spanish orthography or common Spanish tokens."""
+    for ch in SPANISH_CHARS:
+        if ch in question_lower:
+            return True
+    padded = " " + question_lower + " "
+    for token in SPANISH_TOKENS:
+        if token in padded:
+            return True
+    return False
+
+
+# Bilingual intent keywords for routing the written answer.
+KW_RISK = ("risk", "danger", "worst", "downside",
+           "riesgo", "peligro", "caida", "caída", "peor")
+KW_TREND = ("trend", "strength", "weak", "healthy", "momentum",
+            "tendencia", "fuerza", "debil", "débil", "sano", "salud", "impulso")
+KW_LEVELS = ("level", "support", "resistance", "zone",
+             "nivel", "soporte", "resistencia", "zona")
+KW_FIB = ("fib", "retrace", "retroceso", "fibonacci", "pocket")
+KW_SCENARIO = ("scenario", "possible", "paths", "what if", "next",
+               "escenario", "posible", "caminos", "futuro", "siguiente", "pasar")
+KW_STRUCTURE = ("structure", "swing", "pattern",
+                "estructura", "patron", "patrón", "regimen", "régimen")
+
+
+def _has_any(text, keywords):
+    """True when any keyword appears in the text."""
+    for k in keywords:
+        if k in text:
+            return True
+    return False
+
 
 # =============================================================================
 # SECTION 6 — THE CONTRACT
@@ -895,7 +941,10 @@ class IChartAnalyst(gl.Contract):
         prompt = (
             "DATA:\n" + stats_json + "\nQUESTION: " + question + "\n"
             'Return ONLY a JSON object: {"direction":"bullish|bearish|neutral",'
-            '"support":N,"resistance":N,"strip":"max 8 words"}'
+            '"support":N,"resistance":N,'
+            '"answer":"1-2 educational sentences answering QUESTION using DATA numbers, '
+            'max 40 words, SAME LANGUAGE as QUESTION, never advice or predictions",'
+            '"strip":"max 8 words, same language as QUESTION"}'
         )
 
         def leader():
@@ -922,41 +971,128 @@ class IChartAnalyst(gl.Contract):
             if not (wl * 0.5 <= s < r <= wh * 1.5):
                 raise gl.vm.UserError(ERROR_MESSAGES["llm_levels_range"])
 
+            # the LLM's own written answer (not consensus-critical; language
+            # and intent enforced by the prompt). The bilingual template
+            # below remains as grounding + fallback.
+            ans = str(raw.get("answer") or "").strip()[:320]
+
+            # bilingual, intent-routed written answer — the response must
+            # speak the language of the question and address its intent
             ql = question.lower()
-            base = (
-                symbol + " " + timeframe + ": " + ("+" if chg >= 0 else "")
-                + str(round(chg, 2)) + "% window (" + str(round(wl, 2)) + "-"
-                + str(round(wh, 2)) + "), close " + str(round(lc, 2)) + "."
-            )
-            if "risk" in ql or "danger" in ql or "worst" in ql:
-                tail = (
-                    " Risk concentrates at the consensus levels: losing support "
-                    + str(round(s, 2)) + " opens the downside, while "
-                    + str(round(r, 2)) + " has been capping price."
-                )
-            elif "trend" in ql or "strength" in ql or "weak" in ql or "healthy" in ql or "momentum" in ql:
-                tail = (
-                    " The window reads " + d + "; holding above " + str(round(s, 2))
-                    + " preserves that structure, and a push through " + str(round(r, 2))
-                    + " would strengthen it."
-                )
-            elif "level" in ql or "support" in ql or "resistance" in ql or "zone" in ql:
-                tail = (
-                    " Validators agreed on the key levels: support " + str(round(s, 2))
-                    + " and resistance " + str(round(r, 2)) + "."
+            es = _looks_spanish(ql)
+            ss = str(round(s, 2))
+            rs = str(round(r, 2))
+            d_es = {"bullish": "alcista", "bearish": "bajista", "neutral": "neutral"}[d]
+
+            if es:
+                base = (
+                    symbol + " " + timeframe + ": " + ("+" if chg >= 0 else "")
+                    + str(round(chg, 2)) + "% en la ventana (" + str(round(wl, 2)) + "-"
+                    + str(round(wh, 2)) + "), cierre " + str(round(lc, 2)) + "."
                 )
             else:
-                tail = (
-                    " Consensus reads the structure as " + d + " between support "
-                    + str(round(s, 2)) + " and resistance " + str(round(r, 2)) + "."
+                base = (
+                    symbol + " " + timeframe + ": " + ("+" if chg >= 0 else "")
+                    + str(round(chg, 2)) + "% window (" + str(round(wl, 2)) + "-"
+                    + str(round(wh, 2)) + "), close " + str(round(lc, 2)) + "."
                 )
+
+            if _has_any(ql, KW_RISK):
+                if es:
+                    tail = (
+                        " El riesgo se concentra en los niveles consensuados: perder el soporte "
+                        + ss + " abre la caída, mientras que " + rs
+                        + " viene frenando el precio."
+                    )
+                else:
+                    tail = (
+                        " Risk concentrates at the consensus levels: losing support "
+                        + ss + " opens the downside, while " + rs
+                        + " has been capping price."
+                    )
+            elif _has_any(ql, KW_FIB):
+                if es:
+                    tail = (
+                        " El retroceso se mide sobre el rango validado: soporte "
+                        + ss + " y resistencia " + rs
+                        + " delimitan el swing que los validadores acordaron."
+                    )
+                else:
+                    tail = (
+                        " The retracement is measured over the validated range: support "
+                        + ss + " and resistance " + rs
+                        + " bound the swing the validators agreed on."
+                    )
+            elif _has_any(ql, KW_SCENARIO):
+                if es:
+                    tail = (
+                        " Los caminos posibles quedan acotados por el consenso: hacia "
+                        + rs + " si el impulso continúa, hacia " + ss
+                        + " si se pierde — ambos igual de hipotéticos."
+                    )
+                else:
+                    tail = (
+                        " The possible paths are bounded by consensus: toward "
+                        + rs + " if momentum continues, toward " + ss
+                        + " if it fails — both equally hypothetical."
+                    )
+            elif _has_any(ql, KW_TREND):
+                if es:
+                    tail = (
+                        " La ventana se lee " + d_es + "; mantenerse sobre " + ss
+                        + " preserva esa estructura, y superar " + rs
+                        + " la reforzaría."
+                    )
+                else:
+                    tail = (
+                        " The window reads " + d + "; holding above " + ss
+                        + " preserves that structure, and a push through " + rs
+                        + " would strengthen it."
+                    )
+            elif _has_any(ql, KW_STRUCTURE):
+                if es:
+                    tail = (
+                        " La estructura validada es " + d_es
+                        + ": los extremos del swing quedan entre " + ss
+                        + " y " + rs + "."
+                    )
+                else:
+                    tail = (
+                        " The validated structure is " + d
+                        + ": the swing extremes sit between " + ss
+                        + " and " + rs + "."
+                    )
+            elif _has_any(ql, KW_LEVELS):
+                if es:
+                    tail = (
+                        " Los validadores acordaron los niveles clave: soporte "
+                        + ss + " y resistencia " + rs + "."
+                    )
+                else:
+                    tail = (
+                        " Validators agreed on the key levels: support "
+                        + ss + " and resistance " + rs + "."
+                    )
+            else:
+                if es:
+                    tail = (
+                        " El consenso lee la estructura como " + d_es
+                        + " entre el soporte " + ss + " y la resistencia " + rs + "."
+                    )
+                else:
+                    tail = (
+                        " Consensus reads the structure as " + d
+                        + " between support " + ss + " and resistance " + rs + "."
+                    )
 
             return json.dumps(
                 {"direction": d, "support": round(s, 4), "resistance": round(r, 4),
                  "last_close": round(lc, 4),
                  "first_time_s": int(bounds.get("first_time_s", 0)),
                  "last_time_s": int(bounds.get("last_time_s", 0)),
-                 "summary": base + tail,
+                 # LLM-written answer, grounded with the consensus numbers;
+                 # routed template only if the model skipped it
+                 "summary": (ans + " " + base) if len(ans) >= 15 else (base + tail),
                  "strip": str(raw.get("strip") or "")[:MAX_STRIP_CHARS]},
                 separators=(",", ":"))
 

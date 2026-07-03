@@ -8,7 +8,7 @@
 consensus on-chain — and draws the answer onto your chart as living light.**
 
 [**Live App**](https://ichart.pages.dev) ·
-[**Contract on Bradbury**](https://explorer-bradbury.genlayer.com/address/0xdAb34c76C40F77cCf9cC3d8D603F74159566232a) ·
+[**Contract on Bradbury**](https://explorer-bradbury.genlayer.com/address/0x9c939247790c09104e085Ca341188eca372A0C00) ·
 [**Free Testnet GEN**](https://testnet-faucet.genlayer.foundation/)
 
 ![GenLayer](https://img.shields.io/badge/GenLayer-Testnet_Bradbury-a78bfa?style=for-the-badge)

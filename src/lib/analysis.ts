@@ -193,7 +193,7 @@ function buildActions(question: string, f: Facts): OverlayAction[] {
   const hiC = f.win.reduce((a, c) => (c.high > a.high ? c : a), f.win[0]);
   const loC = f.win.reduce((a, c) => (c.low < a.low ? c : a), f.win[0]);
 
-  if (/fib|retrace/.test(q)) {
+  if (/fib|retrace|retroceso/.test(q)) {
     const up = loC.time < hiC.time;
     return [
       {
@@ -212,7 +212,7 @@ function buildActions(question: string, f: Facts): OverlayAction[] {
     ];
   }
 
-  if (/scenario|possible|paths|what if|next|could/.test(q)) {
+  if (/scenario|possible|paths|what if|next|could|escenario|posible|caminos|futuro|siguiente|pasar/.test(q)) {
     return [
       {
         type: 'scenario',
@@ -251,7 +251,7 @@ function buildActions(question: string, f: Facts): OverlayAction[] {
     ];
   }
 
-  if (/risk|danger|worst|volatil/.test(q)) {
+  if (/risk|danger|worst|volatil|riesgo|peligro|ca[ií]da|peor/.test(q)) {
     return [
       { type: 'zone', priceLow: f.s - span * 0.07, priceHigh: f.s + span * 0.07, kind: 'support', label: `Support risk floor ${f.s}` },
       { type: 'zone', priceLow: f.r - span * 0.07, priceHigh: f.r + span * 0.07, kind: 'resistance', label: `Resistance cap ${f.r}` },
@@ -260,7 +260,7 @@ function buildActions(question: string, f: Facts): OverlayAction[] {
     ];
   }
 
-  if (/trend|strength|weak|healthy|momentum/.test(q)) {
+  if (/trend|strength|weak|healthy|momentum|tendencia|fuerza|d[eé]bil|salud|impulso/.test(q)) {
     // least-squares fit over the analyzed window
     const n = f.win.length;
     let sx = 0, sy = 0, sxy = 0, sxx = 0;
@@ -286,7 +286,7 @@ function buildActions(question: string, f: Facts): OverlayAction[] {
     ];
   }
 
-  if (/structure|swing|pattern/.test(q)) {
+  if (/structure|swing|pattern|estructura|patr[oó]n|r[eé]gimen/.test(q)) {
     return [
       { type: 'marker', time: hiC.time, position: 'above', shape: 'arrowDown', tone: 'bearish', text: 'Window high' },
       { type: 'marker', time: loC.time, position: 'below', shape: 'arrowUp', tone: 'bullish', text: 'Window low' },
@@ -344,11 +344,15 @@ function buildResponse(
     actions = buildActions(question, facts);
   }
 
+  const isSpanish = /[¿¡áéíóúñ]|riesgo|tendencia|soporte|resistencia|escenario|mercado|nivel|estructura|retroceso|dibuja|muestra|explica/i.test(
+    question,
+  );
+  const footer = isSpanish
+    ? ' Verificado de forma independiente por múltiples validadores; no es un pronóstico.'
+    : ' Verified independently by multiple validators; not a forecast.';
   const summary =
     (a.summary || 'Consensus analysis recorded on-chain.') +
-    (support !== null && resistance !== null
-      ? ` Verified independently by multiple validators; not a forecast.`
-      : '');
+    (support !== null && resistance !== null ? footer : '');
 
   return {
     summary,
