@@ -8,7 +8,7 @@
 consensus on-chain — and draws the answer onto your chart as living light.**
 
 [**Live App**](https://ichart.pages.dev) ·
-[**Contract on Bradbury**](https://explorer-bradbury.genlayer.com/address/0xc0d915397e19A6D6455aA0300da3cbbf718fcE99) ·
+[**Contract on Bradbury**](https://explorer-bradbury.genlayer.com/address/0xdAb34c76C40F77cCf9cC3d8D603F74159566232a) ·
 [**Free Testnet GEN**](https://testnet-faucet.genlayer.foundation/)
 
 ![GenLayer](https://img.shields.io/badge/GenLayer-Testnet_Bradbury-a78bfa?style=for-the-badge)
@@ -86,21 +86,21 @@ exactly why, with one-click retry. Never a silent fallback.
 ## Architecture
 
 ```
-┌─────────────────────────  YOUR BROWSER  ─────────────────────────┐
-│                                                                   │
-│  React + Vite + TypeScript · lightweight-charts · canvas overlays │
-│                                                                   │
-│   Binance REST/WS ──► live candles (the chart's heartbeat)        │
-│   genlayer-js ──────► writeContract signed by YOUR wallet         │
-│   poll getTransaction + get_latest ──► consensus record           │
-│   question router ──► fib / scenarios / risk / trend drawings     │
-│                                                                   │
-└──────────────┬────────────────────────────────┬──────────────────┘
-               │                                │
-               ▼                                ▼
-   Cloudflare Pages (static)        GenLayer Testnet Bradbury
-   dist/ + /api/config JSON         IChartAnalyst contract
-   no servers, no secrets           validators run the LLMs
++-------------------------  YOUR BROWSER  -------------------------+
+|                                                                  |
+|  React + Vite + TypeScript · lightweight-charts · canvas         |
+|                                                                  |
+|   Binance REST/WS ----> live candles (the chart's heartbeat)     |
+|   genlayer-js --------> writeContract signed by YOUR wallet      |
+|   poll getTransaction + get_latest ----> consensus record        |
+|   question router ----> fib / scenarios / risk / trend drawings  |
+|                                                                  |
++---------------+---------------------------------+----------------+
+                |                                 |
+                v                                 v
+    Cloudflare Pages (static)         GenLayer Testnet Bradbury
+    dist/ + /api/config JSON          IChartAnalyst contract
+    no servers, no secrets            validators run the LLMs
 ```
 
 **The Intelligent Contract** ([`genlayer/contracts/ichart_analyst.py`](genlayer/contracts/ichart_analyst.py)):
@@ -109,8 +109,17 @@ exactly why, with one-click retry. Never a silent fallback.
 |---|---|
 | `analyze(symbol, tf, stats, question)` | One LLM judgment under consensus: leader answers, every validator re-runs it in a sandbox and must agree on **direction (exact)** + **support/resistance (within 3%)** |
 | `get_latest(symbol)` | Latest consensus record for a symbol |
-| `get_history(n)` | The append-only public log of validated analyses |
-| `get_analysis_count()` | How many answers this chart has earned |
+| `get_history(n)` / `get_history_for(symbol, n)` | The append-only public log of validated analyses |
+| `get_record_by_seq(seq)` | Any historical record by its sequence number |
+| `get_direction_counts()` | Aggregate verdict statistics across all records |
+| `get_contract_info()` | Contract identity card (version, network, tolerances) |
+
+The contract also carries a complete, self-contained technical-analysis reference
+library (moving averages, RSI, MACD, Bollinger, pivots, market structure,
+Fibonacci, candlestick patterns, event statistics) kept outside the consensus
+path by design — every line of a GenLayer contract executes on every validator,
+so the live judgment stays minimal while the toolkit remains on-chain as the
+canonical reference for auditors and future versions.
 
 The market stats the contract judges are computed from **public, immutable, closed
 Binance candles** — anyone can re-audit any record against the recorded window.
@@ -122,7 +131,7 @@ git clone https://github.com/abstrusimad/ichart.git
 cd ichart
 npm install
 cp .env.example .env        # add a deployer key only if you'll redeploy the contract
-npm run dev                 # → http://localhost:5173
+npm run dev                 # -> http://localhost:5173
 ```
 
 You'll need [MetaMask](https://metamask.io) and free GEN from the
@@ -136,7 +145,7 @@ npm i -g genlayer
 genlayer account import --name deployer --private-key $GENLAYER_PRIVATE_KEY
 genlayer network set testnet-bradbury
 genlayer deploy --contract genlayer/contracts/ichart_analyst.py
-# put the printed address in .env → GENLAYER_CONTRACT_ADDRESS
+# put the printed address in .env -> GENLAYER_CONTRACT_ADDRESS
 ```
 
 **Ship to production** (Cloudflare Pages, zero servers):
