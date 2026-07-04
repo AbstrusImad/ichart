@@ -1857,4 +1857,12 @@ button.wm-row:hover {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+
+  /* the scanline is a status indicator, not decoration: without it the app
+     looks dead while validators vote. Keep a slower, gentler sweep even when
+     the OS asks for reduced motion (Windows battery saver triggers this). */
+  .scanline {
+    animation-duration: 4.5s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
