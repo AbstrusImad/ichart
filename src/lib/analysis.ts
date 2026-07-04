@@ -40,6 +40,7 @@ interface ChainRecord {
     first_time_s?: number;
     last_time_s?: number;
     summary?: string;
+    intent?: string;
     strip?: string;
   };
 }
@@ -50,15 +51,61 @@ function buildStats(candles: Candle[]): string {
   const win = candles.slice(-96);
   const closes = win.map((c) => c.close);
   const last = closes[closes.length - 1];
-  const chg = ((last - closes[0]) / closes[0]) * 100;
   const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  const hi = Math.max(...win.map((c) => c.high));
+  const lo = Math.min(...win.map((c) => c.low));
+
+  // rich derived features instead of the raw series: Bradbury's per-round
+  // budget can't absorb raw candles in the LLM prompt (leader times out),
+  // but ~18 descriptive numbers give the model enough substance to write a
+  // question-specific answer. All deterministic from public closed candles,
+  // so any record remains auditable off-chain.
+  const n = win.length;
+  let sx = 0, sy = 0, sxy = 0, sxx = 0;
+  closes.forEach((c, i) => {
+    sx += i; sy += c; sxy += i * c; sxx += i * i;
+  });
+  const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx || 1);
+  const trendPct = (slope * (n - 1)) / (closes[0] || 1) * 100;
+
+  const tr = win.map((c) => (c.high - c.low) / (c.close || 1)) ;
+  const volPct = (tr.reduce((a, b) => a + b, 0) / n) * 100;
+
+  const last12 = win.slice(-12);
+  const chg12 = ((last - last12[0].close) / last12[0].close) * 100;
+  const green12 = last12.filter((c) => c.close >= c.open).length;
+  let streak = 0;
+  for (let i = win.length - 1; i >= 0; i--) {
+    const up = win[i].close >= win[i].open;
+    if (i === win.length - 1) streak = up ? 1 : -1;
+    else if (up === streak > 0) streak += up ? 1 : -1;
+    else break;
+  }
+  let uw = 0, lw = 0;
+  last12.forEach((c) => {
+    const range = c.high - c.low || 1e-9;
+    uw += (c.high - Math.max(c.open, c.close)) / range;
+    lw += (Math.min(c.open, c.close) - c.low) / range;
+  });
+
   return JSON.stringify({
     last_close: r4(last),
-    change_pct: Math.round(chg * 100) / 100,
-    high: r4(Math.max(...win.map((c) => c.high))),
-    low: r4(Math.min(...win.map((c) => c.low))),
+    change_pct: r2(((last - closes[0]) / closes[0]) * 100),
+    high: r4(hi),
+    low: r4(lo),
     first_time_s: win[0].time,
     last_time_s: win[win.length - 1].time,
+    range_pos_pct: r2(((last - lo) / (hi - lo || 1)) * 100),
+    trend_slope_pct: r2(trendPct),
+    avg_candle_range_pct: r2(volPct),
+    last12_change_pct: r2(chg12),
+    green_of_last12: green12,
+    candle_streak: streak,
+    upper_wick_share_pct: r2((uw / 12) * 100),
+    lower_wick_share_pct: r2((lw / 12) * 100),
+    dist_to_high_pct: r2(((hi - last) / last) * 100),
+    dist_to_low_pct: r2(((last - lo) / last) * 100),
   });
 }
 
@@ -182,10 +229,14 @@ const consensusHlines = (f: Facts): OverlayAction[] => [
   { type: 'hline', price: f.r, style: 'dashed', tone: 'bearish', label: `Consensus resistance ${f.r}` },
 ];
 
-/** Question-routed drawings — each question type gets its own visualization
- *  of the SAME consensus-verified facts, anchored with local candle geometry. */
-function buildActions(question: string, f: Facts): OverlayAction[] {
+/** Intent-routed drawings — the LLM (under consensus) declares which lens the
+ *  question asks for; keyword regexes remain only as a fallback for records
+ *  written by older contract versions. */
+function buildActions(question: string, f: Facts, intent?: string): OverlayAction[] {
   const q = question.toLowerCase();
+  const k = intent && ['fib', 'scenario', 'risk', 'trend', 'structure', 'levels'].includes(intent)
+    ? intent
+    : '';
   const span = f.r - f.s;
   const tone = f.direction === 'bullish' ? 'bullish' : f.direction === 'bearish' ? 'bearish' : 'neutral';
   const t = (k: number) => f.t1 + k * f.interval;
@@ -193,7 +244,7 @@ function buildActions(question: string, f: Facts): OverlayAction[] {
   const hiC = f.win.reduce((a, c) => (c.high > a.high ? c : a), f.win[0]);
   const loC = f.win.reduce((a, c) => (c.low < a.low ? c : a), f.win[0]);
 
-  if (/fib|retrace|retroceso/.test(q)) {
+  if (k === 'fib' || (!k && /fib|retrace|retroceso/.test(q))) {
     const up = loC.time < hiC.time;
     return [
       {
@@ -212,7 +263,7 @@ function buildActions(question: string, f: Facts): OverlayAction[] {
     ];
   }
 
-  if (/scenario|possible|paths|what if|next|could|escenario|posible|caminos|futuro|siguiente|pasar/.test(q)) {
+  if (k === 'scenario' || (!k && /scenario|possible|paths|what if|next|could|escenario|posible|caminos|futuro|siguiente|pasar/.test(q))) {
     return [
       {
         type: 'scenario',
@@ -251,7 +302,7 @@ function buildActions(question: string, f: Facts): OverlayAction[] {
     ];
   }
 
-  if (/risk|danger|worst|volatil|riesgo|peligro|ca[ií]da|peor/.test(q)) {
+  if (k === 'risk' || (!k && /risk|danger|worst|volatil|riesgo|peligro|ca[ií]da|peor/.test(q))) {
     return [
       { type: 'zone', priceLow: f.s - span * 0.07, priceHigh: f.s + span * 0.07, kind: 'support', label: `Support risk floor ${f.s}` },
       { type: 'zone', priceLow: f.r - span * 0.07, priceHigh: f.r + span * 0.07, kind: 'resistance', label: `Resistance cap ${f.r}` },
@@ -260,7 +311,7 @@ function buildActions(question: string, f: Facts): OverlayAction[] {
     ];
   }
 
-  if (/trend|strength|weak|healthy|momentum|tendencia|fuerza|d[eé]bil|salud|impulso/.test(q)) {
+  if (k === 'trend' || (!k && /trend|strength|weak|healthy|momentum|tendencia|fuerza|d[eé]bil|salud|impulso/.test(q))) {
     // least-squares fit over the analyzed window
     const n = f.win.length;
     let sx = 0, sy = 0, sxy = 0, sxx = 0;
@@ -286,7 +337,7 @@ function buildActions(question: string, f: Facts): OverlayAction[] {
     ];
   }
 
-  if (/structure|swing|pattern|estructura|patr[oó]n|r[eé]gimen/.test(q)) {
+  if (k === 'structure' || (!k && /structure|swing|pattern|estructura|patr[oó]n|r[eé]gimen/.test(q))) {
     return [
       { type: 'marker', time: hiC.time, position: 'above', shape: 'arrowDown', tone: 'bearish', text: 'Window high' },
       { type: 'marker', time: loC.time, position: 'below', shape: 'arrowUp', tone: 'bullish', text: 'Window low' },
@@ -341,18 +392,12 @@ function buildResponse(
       win: win.length >= 2 ? win : candles.slice(-96),
       interval: candles[1].time - candles[0].time || 60,
     };
-    actions = buildActions(question, facts);
+    actions = buildActions(question, facts, a.intent);
   }
 
-  const isSpanish = /[¿¡áéíóúñ]|riesgo|tendencia|soporte|resistencia|escenario|mercado|nivel|estructura|retroceso|dibuja|muestra|explica/i.test(
-    question,
-  );
-  const footer = isSpanish
-    ? ' Verificado de forma independiente por múltiples validadores; no es un pronóstico.'
-    : ' Verified independently by multiple validators; not a forecast.';
-  const summary =
-    (a.summary || 'Consensus analysis recorded on-chain.') +
-    (support !== null && resistance !== null ? footer : '');
+  // the summary is the LLM's own words, agreed under consensus — shown
+  // verbatim, no hardcoded footer in any language
+  const summary = a.summary || 'Consensus analysis recorded on-chain.';
 
   return {
     summary,

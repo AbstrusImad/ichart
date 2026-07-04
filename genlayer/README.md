@@ -5,7 +5,7 @@ GenLayer validators** each independently runs the LLM judgment and votes. Only a
 answer the committee agrees on gets recorded on-chain — and every transaction is
 signed by the user's own wallet.
 
-**Deployed:** `0x9c939247790c09104e085Ca341188eca372A0C00` on **Testnet Bradbury**
+**Deployed:** `0x5082A383d9Cf257Ed74FbB0c5eaeE26ff444F866` on **Testnet Bradbury**
 (chain 4221 · [explorer](https://explorer-bradbury.genlayer.com)). Market stats are
 computed client-side from public immutable Binance candles (auditable against the
 recorded window); consensus is enforced on the judgment: direction exact,
@@ -33,8 +33,8 @@ every validator re-runs it via gl.vm.spawn_sandbox and votes:
 MAJORITY_AGREE -> record appended to on-chain history
    |
    v
-browser polls get_latest, routes the drawings by question type
-(fibonacci / scenarios / risk / trend / structure / levels)
+browser polls get_latest, routes the drawings by the intent the
+LLM chose under consensus (fib / scenario / risk / trend / structure / levels)
 ```
 
 ## Files

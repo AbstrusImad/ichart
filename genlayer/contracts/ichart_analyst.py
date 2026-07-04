@@ -88,7 +88,7 @@ LEVEL_TOLERANCE_PCT = 3
 
 # Hard caps applied to caller-provided inputs before anything else runs.
 MAX_QUESTION_CHARS = 300
-MAX_STATS_CHARS = 400
+MAX_STATS_CHARS = 6000
 MIN_STATS_CHARS = 20
 MAX_STRIP_CHARS = 80
 MAX_HISTORY_PAGE = 20
@@ -939,11 +939,18 @@ class IChartAnalyst(gl.Contract):
             raise gl.vm.UserError(ERROR_MESSAGES["bad_stats"])
 
         prompt = (
-            "DATA:\n" + stats_json + "\nQUESTION: " + question + "\n"
-            'Return ONLY a JSON object: {"direction":"bullish|bearish|neutral",'
-            '"support":N,"resistance":N,'
-            '"answer":"1-2 educational sentences answering QUESTION using DATA numbers, '
-            'max 40 words, SAME LANGUAGE as QUESTION, never advice or predictions",'
+            "DATA (window statistics computed from public closed candles):\n"
+            + stats_json + "\nQUESTION: " + question + "\n"
+            'Return ONLY a JSON object: {'
+            '"direction":"bullish if trend_slope_pct positive, bearish if negative, '
+            'neutral if near zero",'
+            '"support":N very close to DATA low,'
+            '"resistance":N very close to DATA high,'
+            '"intent":"fib|scenario|risk|trend|structure|levels",'
+            '"answer":"2-4 sentences that directly answer QUESTION using specific '
+            'numbers from DATA in plain words (never mention DATA field names), '
+            'in the SAME LANGUAGE as QUESTION, educational tone, '
+            'never advice or predictions",'
             '"strip":"max 8 words, same language as QUESTION"}'
         )
 
@@ -963,18 +970,53 @@ class IChartAnalyst(gl.Contract):
                 d = "bearish"
             elif d not in DIRS:
                 d = "neutral"
+            def _num(x):
+                # LLM numbers arrive in any locale: "61,248.86" (thousands),
+                # "95,42" (decimal comma), "61 248,86". Normalize before float().
+                t = str(x).strip().replace(" ", "").replace(" ", "")
+                # When both separators appear, the LAST one is the decimal
+                # point ("61,248.86" US vs "61.248,86" EU). A lone separator
+                # with a 3-digit tail is ambiguous: pick the reading that
+                # lands inside the plausible price window.
+                has_c = "," in t
+                has_d = "." in t
+                if has_c and has_d:
+                    if t.rfind(",") > t.rfind("."):
+                        t = t.replace(".", "").replace(",", ".")
+                    else:
+                        t = t.replace(",", "")
+                    return float(t)
+                sep = "," if has_c else ("." if has_d else "")
+                if sep:
+                    parts = t.split(sep)
+                    if len(parts) == 2 and len(parts[1]) == 3:
+                        joined = float(parts[0] + parts[1])
+                        if wl * 0.5 <= joined <= wh * 1.5:
+                            return joined
+                        return float(parts[0] + "." + parts[1])
+                    if len(parts) == 2:
+                        return float(parts[0] + "." + parts[1])
+                    return float(t.replace(sep, ""))
+                return float(t)
+
             try:
-                s = float(str(raw.get("support")).replace(",", ""))
-                r = float(str(raw.get("resistance")).replace(",", ""))
+                s = _num(raw.get("support"))
+                r = _num(raw.get("resistance"))
             except (ValueError, TypeError):
                 raise gl.vm.UserError(ERROR_MESSAGES["llm_bad_levels"])
             if not (wl * 0.5 <= s < r <= wh * 1.5):
                 raise gl.vm.UserError(ERROR_MESSAGES["llm_levels_range"])
 
             # the LLM's own written answer (not consensus-critical; language
-            # and intent enforced by the prompt). The bilingual template
-            # below remains as grounding + fallback.
-            ans = str(raw.get("answer") or "").strip()[:320]
+            # enforced by the prompt: same as the question). The bilingual
+            # template below is a FALLBACK ONLY, used when the model skips it.
+            ans = str(raw.get("answer") or "").strip()[:700]
+
+            # drawing intent chosen by the LLM (not consensus-critical);
+            # the client routes chart drawings by this, language-independent
+            it = str(raw.get("intent") or "").strip().lower()
+            if it not in ("fib", "scenario", "risk", "trend", "structure", "levels"):
+                it = "levels"
 
             # bilingual, intent-routed written answer — the response must
             # speak the language of the question and address its intent
@@ -1090,9 +1132,10 @@ class IChartAnalyst(gl.Contract):
                  "last_close": round(lc, 4),
                  "first_time_s": int(bounds.get("first_time_s", 0)),
                  "last_time_s": int(bounds.get("last_time_s", 0)),
-                 # LLM-written answer, grounded with the consensus numbers;
-                 # routed template only if the model skipped it
-                 "summary": (ans + " " + base) if len(ans) >= 15 else (base + tail),
+                 # the LLM's answer verbatim — the template is only a
+                 # fallback when the model returned nothing usable
+                 "summary": ans if len(ans) >= 15 else (base + tail),
+                 "intent": it,
                  "strip": str(raw.get("strip") or "")[:MAX_STRIP_CHARS]},
                 separators=(",", ":"))
 

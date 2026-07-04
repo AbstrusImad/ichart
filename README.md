@@ -8,7 +8,7 @@
 consensus on-chain — and draws the answer onto your chart as living light.**
 
 [**Live App**](https://ichart.pages.dev) ·
-[**Contract on Bradbury**](https://explorer-bradbury.genlayer.com/address/0x9c939247790c09104e085Ca341188eca372A0C00) ·
+[**Contract on Bradbury**](https://explorer-bradbury.genlayer.com/address/0x5082A383d9Cf257Ed74FbB0c5eaeE26ff444F866) ·
 [**Free Testnet GEN**](https://testnet-faucet.genlayer.foundation/)
 
 ![GenLayer](https://img.shields.io/badge/GenLayer-Testnet_Bradbury-a78bfa?style=for-the-badge)
@@ -93,7 +93,7 @@ exactly why, with one-click retry. Never a silent fallback.
 |   Binance REST/WS ----> live candles (the chart's heartbeat)     |
 |   genlayer-js --------> writeContract signed by YOUR wallet      |
 |   poll getTransaction + get_latest ----> consensus record        |
-|   question router ----> fib / scenarios / risk / trend drawings  |
+|   intent router ------> fib / scenarios / risk / trend drawings  |
 |                                                                  |
 +---------------+---------------------------------+----------------+
                 |                                 |
