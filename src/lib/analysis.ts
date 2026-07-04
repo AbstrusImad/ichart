@@ -229,14 +229,27 @@ const consensusHlines = (f: Facts): OverlayAction[] => [
   { type: 'hline', price: f.r, style: 'dashed', tone: 'bearish', label: `Consensus resistance ${f.r}` },
 ];
 
-/** Intent-routed drawings — the LLM (under consensus) declares which lens the
- *  question asks for; keyword regexes remain only as a fallback for records
- *  written by older contract versions. */
+/** What the user explicitly asked to see. When the question names the lens
+ *  (fibonacci, scenarios, risk...) that wins outright — a chip click or a
+ *  typed "draw the fibonacci" must never be overridden by the LLM's intent
+ *  classification. The LLM intent only routes questions whose wording
+ *  (or language) the keyword patterns don't cover. */
+function questionKind(q: string): string | null {
+  if (/fib|retrace|retroceso/.test(q)) return 'fib';
+  if (/scenario|possible|paths|what if|next|could|escenario|posible|caminos|futuro|siguiente|pasar/.test(q)) return 'scenario';
+  if (/risk|danger|worst|volatil|riesgo|peligro|ca[ií]da|peor/.test(q)) return 'risk';
+  if (/trend|strength|weak|healthy|momentum|tendencia|fuerza|d[eé]bil|salud|impulso/.test(q)) return 'trend';
+  if (/structure|swing|pattern|candlestick|estructura|patr[oó]n|r[eé]gimen/.test(q)) return 'structure';
+  if (/level|support|resistance|nivel|soporte|resistencia/.test(q)) return 'levels';
+  return null;
+}
+
 function buildActions(question: string, f: Facts, intent?: string): OverlayAction[] {
   const q = question.toLowerCase();
-  const k = intent && ['fib', 'scenario', 'risk', 'trend', 'structure', 'levels'].includes(intent)
+  const llm = intent && ['fib', 'scenario', 'risk', 'trend', 'structure', 'levels'].includes(intent)
     ? intent
-    : '';
+    : null;
+  const k = questionKind(q) ?? llm ?? 'levels';
   const span = f.r - f.s;
   const tone = f.direction === 'bullish' ? 'bullish' : f.direction === 'bearish' ? 'bearish' : 'neutral';
   const t = (k: number) => f.t1 + k * f.interval;
@@ -244,7 +257,7 @@ function buildActions(question: string, f: Facts, intent?: string): OverlayActio
   const hiC = f.win.reduce((a, c) => (c.high > a.high ? c : a), f.win[0]);
   const loC = f.win.reduce((a, c) => (c.low < a.low ? c : a), f.win[0]);
 
-  if (k === 'fib' || (!k && /fib|retrace|retroceso/.test(q))) {
+  if (k === 'fib') {
     const up = loC.time < hiC.time;
     return [
       {
@@ -263,7 +276,7 @@ function buildActions(question: string, f: Facts, intent?: string): OverlayActio
     ];
   }
 
-  if (k === 'scenario' || (!k && /scenario|possible|paths|what if|next|could|escenario|posible|caminos|futuro|siguiente|pasar/.test(q))) {
+  if (k === 'scenario') {
     return [
       {
         type: 'scenario',
@@ -302,7 +315,7 @@ function buildActions(question: string, f: Facts, intent?: string): OverlayActio
     ];
   }
 
-  if (k === 'risk' || (!k && /risk|danger|worst|volatil|riesgo|peligro|ca[ií]da|peor/.test(q))) {
+  if (k === 'risk') {
     return [
       { type: 'zone', priceLow: f.s - span * 0.07, priceHigh: f.s + span * 0.07, kind: 'support', label: `Support risk floor ${f.s}` },
       { type: 'zone', priceLow: f.r - span * 0.07, priceHigh: f.r + span * 0.07, kind: 'resistance', label: `Resistance cap ${f.r}` },
@@ -311,7 +324,7 @@ function buildActions(question: string, f: Facts, intent?: string): OverlayActio
     ];
   }
 
-  if (k === 'trend' || (!k && /trend|strength|weak|healthy|momentum|tendencia|fuerza|d[eé]bil|salud|impulso/.test(q))) {
+  if (k === 'trend') {
     // least-squares fit over the analyzed window
     const n = f.win.length;
     let sx = 0, sy = 0, sxy = 0, sxx = 0;
@@ -337,7 +350,7 @@ function buildActions(question: string, f: Facts, intent?: string): OverlayActio
     ];
   }
 
-  if (k === 'structure' || (!k && /structure|swing|pattern|estructura|patr[oó]n|r[eé]gimen/.test(q))) {
+  if (k === 'structure') {
     return [
       { type: 'marker', time: hiC.time, position: 'above', shape: 'arrowDown', tone: 'bearish', text: 'Window high' },
       { type: 'marker', time: loC.time, position: 'below', shape: 'arrowUp', tone: 'bullish', text: 'Window low' },
