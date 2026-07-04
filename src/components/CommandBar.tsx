@@ -1,8 +1,7 @@
-// The command bar: how you speak to the chart. Demo prompts as chips,
-// free-form input, and a clear-overlays escape hatch.
+// The command bar: how you speak to the chart. Free-form input and a
+// clear-overlays escape hatch.
 
 import { useRef, useState } from 'react';
-import { DEMO_PROMPTS } from '../lib/types';
 import { EraseIcon, SendIcon, SparkIcon } from './icons';
 
 interface CommandBarProps {
@@ -32,20 +31,6 @@ export default function CommandBar({
 
   return (
     <div className="command-dock enter-3">
-      <div className="chips" role="list" aria-label="Suggested questions">
-        {DEMO_PROMPTS.map((p) => (
-          <button
-            key={p}
-            role="listitem"
-            className="chip"
-            disabled={thinking || !walletConnected}
-            onClick={() => submit(p)}
-          >
-            {p}
-          </button>
-        ))}
-      </div>
-
       <form
         className={`command-bar panel ${thinking ? 'thinking' : ''}`}
         onSubmit={(e) => {

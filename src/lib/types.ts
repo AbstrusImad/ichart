@@ -131,17 +131,6 @@ export const TIMEFRAMES = [
 ] as const;
 export type Timeframe = (typeof TIMEFRAMES)[number]['id'];
 
-export const DEMO_PROMPTS = [
-  'Explain the last 30 candles.',
-  'Show risk zones.',
-  'Find market structure changes.',
-  'Show possible scenarios.',
-  'Draw the Fibonacci retracement.',
-  'Mark candlestick patterns.',
-  'Simplify this chart.',
-  'What changed recently?',
-] as const;
-
 export function tfSeconds(tf: Timeframe): number {
   return TIMEFRAMES.find((t) => t.id === tf)?.seconds ?? 900;
 }
