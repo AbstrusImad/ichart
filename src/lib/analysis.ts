@@ -147,9 +147,11 @@ export async function runConsensusAnalysis(
   const read = getReadClient(cfg);
   const deadline = Date.now() + MAX_WAIT_MS;
 
-  // *_TIMEOUT statuses sometimes recover via leader rotation — but if one
-  // sits unchanged this long, the tx is stuck for good (seen on Bradbury).
-  const STUCK_TIMEOUT_MS = 90_000;
+  // *_TIMEOUT statuses usually recover via leader rotation: measured on
+  // Bradbury (2026-07), transactions regularly settle 3-6 minutes after
+  // first reporting LEADER_TIMEOUT/VALIDATORS_TIMEOUT. Only give up once a
+  // timeout status has sat unchanged well past that window.
+  const STUCK_TIMEOUT_MS = 300_000;
   let lastStatus = '';
   let lastStatusChange = Date.now();
 
